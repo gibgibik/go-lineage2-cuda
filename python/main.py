@@ -33,10 +33,8 @@ def find_bounds():
    (origH, origW) = image.shape[:2]
    newW = 1920
    newH = 1088
-   print(f"[DEBUG] original size: {origW}x{origH}")
    image = cv2.resize(image, (newW, newH))
    (H, W) = image.shape[:2]
-   print(H,W)
    blob = cv2.dnn.blobFromImage(image, 1.0, (W, H),
    	(123.68, 116.78, 103.94), swapRB=True, crop=False)
    net.setInput(blob)
@@ -47,6 +45,8 @@ def find_bounds():
    (scores, geometry) = net.forward(layerNames)
    (rects, confidences) = decode_predictions(scores, geometry)
    boxes = non_max_suppression(np.array(rects), probs=confidences)
+   if not rects:
+       return jsonify({"boxes": []})
 
    # initialize the list of results
    results = []
@@ -79,7 +79,6 @@ def find_bounds():
             continue
 
         # extract the actual padded ROI
-        roi = orig[startY:endY, startX-3:endX+3]
         if white_pixel_percent(orig, (startX, startY, endX, endY)) < 10:
             continue
         # in order to apply Tesseract v4 to OCR text we must supply
@@ -156,33 +155,6 @@ def decode_predictions(scores, geometry):
 	# return a tuple of the bounding boxes and associated confidences
 	return (rects, confidences)
 
-def decode(scores, geometry):
-    boxes = []
-    confidences = []
-    height, width = scores.shape[2:4]
-    for y in range(height):
-        for x in range(width):
-            score = scores[0, 0, y, x]
-            if score < THRESHOLD:
-                continue
-            angle = geometry[0, 4, y, x]
-            cos = math.cos(angle)
-            sin = math.sin(angle)
-            x0 = geometry[0, 0, y, x]
-            x1 = geometry[0, 1, y, x]
-            x2 = geometry[0, 2, y, x]
-            x3 = geometry[0, 3, y, x]
-
-            offsetX, offsetY = x * 4.0, y * 4.0
-            h = x0 + x2
-            w = x1 + x3
-            endX = offsetX + cos * x1 + sin * x2
-            endY = offsetY - sin * x1 + cos * x2
-            boxes.append([endX, endY, w, h, -angle * 180 / math.pi])
-            confidences.append(float(score))
-    return boxes, confidences
-
-
 def check_excluded(rect):
     x1, y1, x2, y2 = rect
     for ex in EXCLUDE_BOUNDS:
@@ -209,25 +181,6 @@ def white_pixel_percent(img, rect):
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
     _, mask = cv2.threshold(gray, 80, 255, cv2.THRESH_BINARY)
     return 100.0 * cv2.countNonZero(mask) / (gray.shape[0] * gray.shape[1])
-
-
-def group_and_sort(rects):
-    y_tol = 3
-    groups = []
-    for r in rects:
-        y = r[1]
-        found = False
-        for g in groups:
-            if abs(g[0][1] - y) <= y_tol:
-                g.append(r)
-                found = True
-                break
-        if not found:
-            groups.append([r])
-    for g in groups:
-        g.sort(key=lambda r: r[0])  # X1
-    groups.sort(key=lambda g: g[0][1])  # Y1
-    return groups
 
 
 def merge_line(line):
@@ -287,13 +240,8 @@ def merge_close_rects(line, x_tol=10):
     return merged
 if __name__ == "__main__":
     net = cv2.dnn.readNet("frozen_east_text_detection.pb")
-    try:
-        net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
-        net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
+    net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
+    net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
 #         net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
 #         net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
-    except Exception as e:
-        print("⚠️ CUDA не доступна, перемикаюсь на CPU:", e)
-        net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
-        net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
     app.run(host="0.0.0.0", port=2224)
