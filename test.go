@@ -49,7 +49,7 @@ func findBoundsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 	mat, _ := gocv.IMDecode(cpImg, gocv.IMReadColor)
-	blob := gocv.BlobFromImage(mat, 1.0, image.Pt(int(resizeWidth), int(resizeHeight)), gocv.NewScalar(123.68, 116.78, 103.94, 0), true, false)
+	blob := gocv.BlobFromImage(mat, 1.0, image.Pt(int(resizeWidth), int(resizeHeight)), gocv.NewScalar(123.68, 116.78, 103.94, 0), true, false) //frozen_east
 	net := gocv.ReadNet("frozen_east_text_detection.pb", "")
 	defer net.Close()
 
