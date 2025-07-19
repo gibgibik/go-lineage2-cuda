@@ -1,8 +1,5 @@
 FROM nvidia/cuda:12.9.1-cudnn-devel-ubuntu20.04
-RUN apt-get update && apt-get -y install nano wget curl git unzip sudo
-RUN wget https://go.dev/dl/go1.24.5.linux-amd64.tar.gz && tar -xf go1.24.5.linux-amd64.tar.gz -C /usr/local
-ENV PATH="$PATH:/usr/local/go/bin"
-RUN cd /tmp && mkdir testgocv && cd testgocv && go mod init testgocv && go get gocv.io/x/gocv@latest
+RUN apt-get update && apt-get -y install nano wget curl git unzip sudo python3 python3-pip
 RUN DEBIAN_FRONTEND=noninteractive  apt install -y  --no-install-recommends \
     build-essential \
     cmake \
@@ -17,4 +14,7 @@ RUN DEBIAN_FRONTEND=noninteractive  apt install -y  --no-install-recommends \
     libpng-dev \
     libtiff-dev \
     libdc1394-22-dev
-RUN cd ~/go/pkg/mod/gocv.io/x/gocv\@v0.41.0 && make install_cuda
+RUN pip install flask numpy imutils
+RUN cd /opt && mkdir opencv && cd opencv && git clone https://github.com/opencv/opencv.git --branch 4.12.0 && git clone https://github.com/opencv/opencv_contrib.git --branch 4.12.0 \
+    && cd opencv && mkdir build && cd build && cmake -D CMAKE_BUILD_TYPE=RELEASE       -D CMAKE_INSTALL_PREFIX=/usr/local       -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules       -D WITH_CUDA=ON       -D WITH_CUDNN=ON       -D CUDNN_INCLUDE_DIR=/usr/include/x86_64-linux-gnu       -D CUDNN_LIBRARY=/usr/lib/x86_64-linux-gnu/libcudnn.so       -D ENABLE_FAST_MATH=1       -D CUDA_FAST_MATH=1       -D WITH_CUBLAS=1       -D BUILD_opencv_python3=ON       -D BUILD_EXAMPLES=OFF .. && make install
+ RUN cp /opt/opencv/opencv/build/lib/python3/cv2.cpython-38-x86_64-linux-gnu.so /usr/local/lib/python3.8/dist-packages/

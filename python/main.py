@@ -79,8 +79,8 @@ def find_bounds():
             continue
 
         # extract the actual padded ROI
-        if white_pixel_percent(orig, (startX, startY, endX, endY)) < 10:
-            continue
+        #if white_pixel_percent(orig, (startX, startY, endX, endY)) < 10:
+         #   continue
         # in order to apply Tesseract v4 to OCR text we must supply
         # (1) a language, (2) an OEM flag of 4, indicating that the we
         # wish to use the LSTM neural net model for OCR, and finally
