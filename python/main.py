@@ -9,7 +9,7 @@ EXCLUDE_BOUNDS = [
     (0, 0, 247, 104), # ex player stat
     (0, 590, 370, 1074), #  chat
     (697, 915, 1273, 1074), #panel with skills
-    (1710, 0, 1920, 233), # map
+    (1710, -50, 1920, 233), # map
     (1644, 0, 1748, 35), #money
     (902, 421, 1109, 665),#me
 ]
@@ -63,8 +63,8 @@ def find_bounds():
         # are computing the deltas in both the x and y directions
 #         dX = int((endX - startX) * 0.01)
 #         dY = int((endY - startY) * 0.01)
-#
-#         # apply padding to each side of the bounding box, respectively
+# #
+# #         # apply padding to each side of the bounding box, respectively
 #         startX = max(0, startX - dX)
 #         startY = max(0, startY - dY)
 #         endX = min(origW, endX + (dX * 2))
@@ -86,9 +86,10 @@ def find_bounds():
         # wish to use the LSTM neural net model for OCR, and finally
         # (3) an OEM value, in this case, 7 which implies that we are
         # treating the ROI as a single line of text
+#         roi = orig[startY:endY, startX-3:endX+3]
 #         config = ("-l eng --oem 1 --psm 7")
 #         text = pytesseract.image_to_string(roi, config=config)
-
+#         print(text)
         # add the bounding box coordinates and OCR'd text to the list
         # of results
         results.append(((startX, startY, endX, endY)))
