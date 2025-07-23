@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 import math
 from imutils.object_detection import non_max_suppression
 app = Flask(__name__)
@@ -23,14 +23,33 @@ rH = 1080 / RESIZE_H
 
 net = None
 
+@app.route("/test", methods=["POST"])
+def test():
+    npimg = np.frombuffer(request.data, np.uint8)
+    image = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+    target_color = np.array([178, 186, 188])
+    tolerance = 120
+    image_int = image.astype(np.int16)
+    diff = np.linalg.norm(image_int - target_color, axis=2)
+    mask = (diff < tolerance).astype(np.uint8) * 255
+    result = cv2.bitwise_and(image, image, mask=mask)
+    success, encoded_img = cv2.imencode(".jpg", result)
+    img_bytes = encoded_img.tobytes()
+    return Response(img_bytes, mimetype="image/jpeg")
 @app.route("/findBounds", methods=["POST"])
 def find_bounds():
    global net
    img_bytes = request.data
    npimg = np.frombuffer(img_bytes, np.uint8)
    image = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
-   orig = image.copy()
-   (origH, origW) = image.shape[:2]
+   target_color = np.array([178, 186, 188])
+   tolerance = 120
+   image_int = image.astype(np.int16)
+   diff = np.linalg.norm(image_int - target_color, axis=2)
+   mask = (diff < tolerance).astype(np.uint8) * 255
+   image = cv2.bitwise_and(image, image, mask=mask)
+   # orig = image.copy()
+   # (origH, origW) = image.shape[:2]
    newW = 1920
    newH = 1088
    image = cv2.resize(image, (newW, newH))
@@ -223,7 +242,6 @@ def group_and_sort_rects(rects, y_tol=3):
     return groups
 
 def merge_close_rects(line, x_tol=10):
-    """Об'єднує сусідні прямокутники в лінії, якщо близько по X."""
     if not line:
         return []
     merged = [line[0]]
