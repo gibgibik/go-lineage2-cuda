@@ -32,12 +32,24 @@ rH = 1080 / RESIZE_H
 net = None
 test_net = None
 ocr_api = PyTessBaseAPI(psm=7, oem=1, lang='eng')
+ocr_api.SetVariable("tessedit_char_whitelist", "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ")
 
 @app.route("/findTargetName", methods=["POST"])
 def find_target_name():
     img_bytes = request.data
     npimg = np.frombuffer(img_bytes, np.uint8)
     image = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+    target_color = np.array([178, 186, 188])
+    tolerance = 150
+    image_int = image.astype(np.int16)
+    diff = np.linalg.norm(image_int - target_color, axis=2)
+    mask = (diff < tolerance).astype(np.uint8) * 255
+    image = cv2.bitwise_and(image, image, mask=mask)
+    # orig = image.copy()
+    # (origH, origW) = image.shape[:2]
+    newW = 1920
+    newH = 1088
+    image = cv2.resize(image, (newW, newH))
     roi = image[2:27, 788:1132]
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
     _, bin_img = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
