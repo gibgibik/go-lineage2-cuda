@@ -3,6 +3,7 @@ import numpy as np
 from flask import Flask, request, jsonify, Response
 import math
 import pytesseract
+import time
 from imutils.object_detection import non_max_suppression
 
 app = Flask(__name__)
@@ -71,7 +72,7 @@ def test():
     npimg = np.frombuffer(img_bytes, np.uint8)
     image = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
     target_color = np.array([178, 186, 188])
-    tolerance = 120
+    tolerance = 150
     image_int = image.astype(np.int16)
     diff = np.linalg.norm(image_int - target_color, axis=2)
     mask = (diff < tolerance).astype(np.uint8) * 255
@@ -145,6 +146,16 @@ def test():
     for g in grouped:
         merged.extend(merge_close_rects(g))
     for (x1, y1, x2, y2) in merged:
+        if x1 > 788 and y1 > 2 and x2 < 1132 and y2 < 27:
+            start = time.time()
+            roi = image[y1:y2,x1:x2]
+            config = ("-l eng --oem 1 --psm 11")
+            text = pytesseract.image_to_string(roi, config=config)
+            end = time.time()
+            elapsed_ms = (end - start) * 1000
+            print(f"Час виконання: {elapsed_ms:.2f} мс")
+            print(x1,y1,x2,y2)
+            print(text)
         cv2.rectangle(image, (x1, y1), (x2, y2), color=(0, 255, 0), thickness=2)
     success, encoded_image = cv2.imencode('.jpg', image)
     return Response(
