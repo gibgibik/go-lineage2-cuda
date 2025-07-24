@@ -2,9 +2,12 @@ import cv2
 import numpy as np
 from flask import Flask, request, jsonify, Response
 import math
-import pytesseract
 import time
 from imutils.object_detection import non_max_suppression
+import json
+import pytesseract
+from tesserocr import PyTessBaseAPI
+from PIL import Image
 
 app = Flask(__name__)
 
@@ -27,7 +30,7 @@ rH = 1080 / RESIZE_H
 
 net = None
 test_net = None
-
+ocr_api = PyTessBaseAPI(psm=7, oem=1, lang='eng')
 
 @app.route("/test", methods=["POST"])
 def test():
@@ -145,17 +148,39 @@ def test():
     merged = []
     for g in grouped:
         merged.extend(merge_close_rects(g))
+    start = time.time()
+    pad = 0
+    roi = image[max(0, 2 - pad):27 + pad, max(0, 788 - pad):1132 + pad]
+    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    _, bin_img = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    ocr_api.SetImage(Image.fromarray(bin_img))
+    text = ocr_api.GetUTF8Text()
+    print(text)
+# config = ("--psm 7 --oem 1 -l eng")
+    # text = pytesseract.image_to_string(bin_img, config=config)
+    # print(text)
+    end = time.time()
+    elapsed_ms = (end - start) * 1000
+    print(f"Час виконання: {elapsed_ms:.2f} мс")
+    # print(text)
     for (x1, y1, x2, y2) in merged:
-        if x1 > 788 and y1 > 2 and x2 < 1132 and y2 < 27:
-            start = time.time()
-            roi = image[y1:y2,x1:x2]
-            config = ("-l eng --oem 1 --psm 11")
-            text = pytesseract.image_to_string(roi, config=config)
-            end = time.time()
-            elapsed_ms = (end - start) * 1000
-            print(f"Час виконання: {elapsed_ms:.2f} мс")
-            print(x1,y1,x2,y2)
-            print(text)
+        # if x1 > 788 and y1 > 2 and x2 < 1132 and y2 < 27:
+        #     start = time.time()
+        #     pad = 0
+        #     roi = image[max(0, y1 - pad):y2 + pad, max(0, x1 - pad):x2 + pad]
+        #     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        #     _, bin_img = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        #     ocr_api.SetImage(Image.fromarray(bin_img))
+        #     text = ocr_api.GetUTF8Text()
+        #     print(text)
+        # # config = ("--psm 7 --oem 1 -l eng")
+        #     # text = pytesseract.image_to_string(bin_img, config=config)
+        #     # print(text)
+        #     end = time.time()
+        #     elapsed_ms = (end - start) * 1000
+        #     print(f"Час виконання: {elapsed_ms:.2f} мс")
+        #     print(x1,y1,x2,y2)
+        #     # print(text)
         cv2.rectangle(image, (x1, y1), (x2, y2), color=(0, 255, 0), thickness=2)
     success, encoded_image = cv2.imencode('.jpg', image)
     return Response(
