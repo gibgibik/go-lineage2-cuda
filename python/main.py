@@ -2,16 +2,20 @@ import cv2
 import numpy as np
 from flask import Flask, request, jsonify, Response
 import math
+import pytesseract
 from imutils.object_detection import non_max_suppression
+
 app = Flask(__name__)
 
 EXCLUDE_BOUNDS = [
-    (0, 0, 247, 104), # ex player stat
-    (0, 590, 370, 1074), #  chat
-    (697, 915, 1273, 1074), #panel with skills
-    (1710, -50, 1920, 233), # map
-    (1644, 0, 1748, 35), #money
-    (902, 421, 1109, 665),#me
+    (0, 0, 247, 110),  # ex player stat
+    (0, 590, 370, 1074),  # chat
+    (697, 915, 1273, 1074),  # panel with skills
+    (1710, -50, 1920, 233),  # map
+    (1644, 0, 1748, 35),  # money
+    (902, 421, 1109, 665),  # me
+    (273, 6, 561, 52),  # buffs
+    (1849, 1061, 1888, 1076),  # time
 ]
 
 THRESHOLD = 0.9995
@@ -20,56 +24,80 @@ RESIZE_W, RESIZE_H = 1920, 1088
 rW = 1920 / RESIZE_W
 rH = 1080 / RESIZE_H
 
-
 net = None
+test_net = None
+
 
 @app.route("/test", methods=["POST"])
 def test():
-    npimg = np.frombuffer(request.data, np.uint8)
+    global test_net
+
+    # img_bytes = request.data
+    # npimg = np.frombuffer(img_bytes, np.uint8)
+    # image = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+    # target_color = np.array([188, 109, 187])
+    # tolerance = 120
+    # image_int = image.astype(np.int16)
+    # diff = np.linalg.norm(image_int - target_color, axis=2)
+    # mask = (diff < tolerance).astype(np.uint8) * 255
+    # image = cv2.bitwise_and(image, image, mask=mask)
+    # contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # filtered_contours = []
+    # for cnt in contours:
+    #     x, y, w, h = cv2.boundingRect(cnt)
+    #     rect = (x, y, x + w, y + h)
+    #     if not check_excluded(rect):
+    #         continue
+    #     # if w < 15 or h < 10:
+    #     #     continue
+    #     # if w / h < 1.2:  # малоімовірно, що горизонтальний текст
+    #     #     continue
+    #     # if w > image.shape[1] * 0.9 or h > image.shape[0] * 0.5:
+    #     #     continue
+    #     filtered_contours.append(cnt)
+    # print(len(filtered_contours))
+    # # for cnt in contours:
+    # #     x, y, w, h = cv2.boundingRect(cnt)
+    # #     if w > 10 and h > 10:
+    # #         crop = image[y:y + h, x:x + w]
+    # #         text = pytesseract.image_to_string(crop, config="--psm 7")
+    # cv2.drawContours(image, filtered_contours, -1, (0, 255, 0), thickness=2)
+    # success, encoded_image = cv2.imencode('.jpg', image)
+    # return Response(
+    #     encoded_image.tobytes(),
+    #     mimetype='image/jpeg'
+    # )
+    img_bytes = request.data
+    npimg = np.frombuffer(img_bytes, np.uint8)
     image = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
     target_color = np.array([178, 186, 188])
     tolerance = 120
     image_int = image.astype(np.int16)
     diff = np.linalg.norm(image_int - target_color, axis=2)
     mask = (diff < tolerance).astype(np.uint8) * 255
-    result = cv2.bitwise_and(image, image, mask=mask)
-    success, encoded_img = cv2.imencode(".jpg", result)
-    img_bytes = encoded_img.tobytes()
-    return Response(img_bytes, mimetype="image/jpeg")
-@app.route("/findBounds", methods=["POST"])
-def find_bounds():
-   global net
-   img_bytes = request.data
-   npimg = np.frombuffer(img_bytes, np.uint8)
-   image = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
-   target_color = np.array([178, 186, 188])
-   tolerance = 120
-   image_int = image.astype(np.int16)
-   diff = np.linalg.norm(image_int - target_color, axis=2)
-   mask = (diff < tolerance).astype(np.uint8) * 255
-   image = cv2.bitwise_and(image, image, mask=mask)
-   # orig = image.copy()
-   # (origH, origW) = image.shape[:2]
-   newW = 1920
-   newH = 1088
-   image = cv2.resize(image, (newW, newH))
-   (H, W) = image.shape[:2]
-   blob = cv2.dnn.blobFromImage(image, 1.0, (W, H),
-   	(123.68, 116.78, 103.94), swapRB=True, crop=False)
-   net.setInput(blob)
-   layerNames = [
-   	"feature_fusion/Conv_7/Sigmoid",
-   	"feature_fusion/concat_3"]
+    image = cv2.bitwise_and(image, image, mask=mask)
+    # orig = image.copy()
+    # (origH, origW) = image.shape[:2]
+    newW = 1920
+    newH = 1088
+    image = cv2.resize(image, (newW, newH))
+    (H, W) = image.shape[:2]
+    blob = cv2.dnn.blobFromImage(image, 1.0, (W, H),
+                                 (123.68, 116.78, 103.94), swapRB=True, crop=False)
+    net.setInput(blob)
+    layerNames = [
+        "feature_fusion/Conv_7/Sigmoid",
+        "feature_fusion/concat_3"]
 
-   (scores, geometry) = net.forward(layerNames)
-   (rects, confidences) = decode_predictions(scores, geometry)
-   boxes = non_max_suppression(np.array(rects), probs=confidences)
-   if not rects:
-       return jsonify({"boxes": []})
+    (scores, geometry) = net.forward(layerNames)
+    (rects, confidences) = decode_predictions(scores, geometry)
+    boxes = non_max_suppression(np.array(rects), probs=confidences)
+    if not rects:
+        return jsonify({"boxes": []})
 
-   # initialize the list of results
-   results = []
-   for (startX, startY, endX, endY) in boxes:
+    # initialize the list of results
+    results = []
+    for (startX, startY, endX, endY) in boxes:
         # scale the bounding box coordinates based on the respective
         # ratios
         startX = int(startX * rW)
@@ -80,100 +108,192 @@ def find_bounds():
         # in order to obtain a better OCR of the text we can potentially
         # apply a bit of padding surrounding the bounding box -- here we
         # are computing the deltas in both the x and y directions
-#         dX = int((endX - startX) * 0.01)
-#         dY = int((endY - startY) * 0.01)
-# #
-# #         # apply padding to each side of the bounding box, respectively
-#         startX = max(0, startX - dX)
-#         startY = max(0, startY - dY)
-#         endX = min(origW, endX + (dX * 2))
-#         endY = min(origH, endY + (dY * 2))
-#
-#         startX = startX - 10
-#         startY = startY - 5
-#         endX = endX + 10
-#         endY = endY + 10
+        #         dX = int((endX - startX) * 0.01)
+        #         dY = int((endY - startY) * 0.01)
+        # #
+        # #         # apply padding to each side of the bounding box, respectively
+        #         startX = max(0, startX - dX)
+        #         startY = max(0, startY - dY)
+        #         endX = min(origW, endX + (dX * 2))
+        #         endY = min(origH, endY + (dY * 2))
+        #
+        #         startX = startX - 10
+        #         startY = startY - 5
+        #         endX = endX + 10
+        #         endY = endY + 10
 
         if not check_excluded((startX, startY, endX, endY)):
             continue
 
         # extract the actual padded ROI
-        #if white_pixel_percent(orig, (startX, startY, endX, endY)) < 10:
-         #   continue
+        # if white_pixel_percent(orig, (startX, startY, endX, endY)) < 10:
+        #   continue
         # in order to apply Tesseract v4 to OCR text we must supply
         # (1) a language, (2) an OEM flag of 4, indicating that the we
         # wish to use the LSTM neural net model for OCR, and finally
         # (3) an OEM value, in this case, 7 which implies that we are
         # treating the ROI as a single line of text
-#         roi = orig[startY:endY, startX-3:endX+3]
-#         config = ("-l eng --oem 1 --psm 7")
-#         text = pytesseract.image_to_string(roi, config=config)
-#         print(text)
+        # roi = orig[startY:endY, startX-3:endX+3]
+        # config = ("-l eng --oem 1 --psm 7")
+        # text = pytesseract.image_to_string(roi, config=config)
+        # print(text)
         # add the bounding box coordinates and OCR'd text to the list
         # of results
         results.append(((startX, startY, endX, endY)))
-   grouped = group_and_sort_rects(results)
-   merged = []
-   for g in grouped:
-       merged.extend(merge_close_rects(g))
+    grouped = group_and_sort_rects(results)
+    merged = []
+    for g in grouped:
+        merged.extend(merge_close_rects(g))
+    for (x1, y1, x2, y2) in merged:
+        cv2.rectangle(image, (x1, y1), (x2, y2), color=(0, 255, 0), thickness=2)
+    success, encoded_image = cv2.imencode('.jpg', image)
+    return Response(
+        encoded_image.tobytes(),
+        mimetype='image/jpeg'
+    )
 
-   return jsonify({"boxes": merged})
+
+@app.route("/findBounds", methods=["POST"])
+def find_bounds():
+    global net
+    img_bytes = request.data
+    npimg = np.frombuffer(img_bytes, np.uint8)
+    image = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+    target_color = np.array([178, 186, 188])
+    tolerance = 120
+    image_int = image.astype(np.int16)
+    diff = np.linalg.norm(image_int - target_color, axis=2)
+    mask = (diff < tolerance).astype(np.uint8) * 255
+    image = cv2.bitwise_and(image, image, mask=mask)
+    # orig = image.copy()
+    # (origH, origW) = image.shape[:2]
+    newW = 1920
+    newH = 1088
+    image = cv2.resize(image, (newW, newH))
+    (H, W) = image.shape[:2]
+    blob = cv2.dnn.blobFromImage(image, 1.0, (W, H),
+                                 (123.68, 116.78, 103.94), swapRB=True, crop=False)
+    net.setInput(blob)
+    layerNames = [
+        "feature_fusion/Conv_7/Sigmoid",
+        "feature_fusion/concat_3"]
+
+    (scores, geometry) = net.forward(layerNames)
+    (rects, confidences) = decode_predictions(scores, geometry)
+    boxes = non_max_suppression(np.array(rects), probs=confidences)
+    if not rects:
+        return jsonify({"boxes": []})
+
+    # initialize the list of results
+    results = []
+    for (startX, startY, endX, endY) in boxes:
+        # scale the bounding box coordinates based on the respective
+        # ratios
+        startX = int(startX * rW)
+        startY = int(startY * rH)
+        endX = int(endX * rW)
+        endY = int(endY * rH)
+
+        # in order to obtain a better OCR of the text we can potentially
+        # apply a bit of padding surrounding the bounding box -- here we
+        # are computing the deltas in both the x and y directions
+        #         dX = int((endX - startX) * 0.01)
+        #         dY = int((endY - startY) * 0.01)
+        # #
+        # #         # apply padding to each side of the bounding box, respectively
+        #         startX = max(0, startX - dX)
+        #         startY = max(0, startY - dY)
+        #         endX = min(origW, endX + (dX * 2))
+        #         endY = min(origH, endY + (dY * 2))
+        #
+        #         startX = startX - 10
+        #         startY = startY - 5
+        #         endX = endX + 10
+        #         endY = endY + 10
+
+        if not check_excluded((startX, startY, endX, endY)):
+            continue
+
+        # extract the actual padded ROI
+        # if white_pixel_percent(orig, (startX, startY, endX, endY)) < 10:
+        #   continue
+        # in order to apply Tesseract v4 to OCR text we must supply
+        # (1) a language, (2) an OEM flag of 4, indicating that the we
+        # wish to use the LSTM neural net model for OCR, and finally
+        # (3) an OEM value, in this case, 7 which implies that we are
+        # treating the ROI as a single line of text
+        # roi = orig[startY:endY, startX-3:endX+3]
+        # config = ("-l eng --oem 1 --psm 7")
+        # text = pytesseract.image_to_string(roi, config=config)
+        # print(text)
+        # add the bounding box coordinates and OCR'd text to the list
+        # of results
+        results.append(((startX, startY, endX, endY)))
+    grouped = group_and_sort_rects(results)
+    merged = []
+    for g in grouped:
+        merged.extend(merge_close_rects(g))
+
+    return jsonify({"boxes": merged})
+
+
 def decode_predictions(scores, geometry):
-	# grab the number of rows and columns from the scores volume, then
-	# initialize our set of bounding box rectangles and corresponding
-	# confidence scores
-	(numRows, numCols) = scores.shape[2:4]
-	rects = []
-	confidences = []
+    # grab the number of rows and columns from the scores volume, then
+    # initialize our set of bounding box rectangles and corresponding
+    # confidence scores
+    (numRows, numCols) = scores.shape[2:4]
+    rects = []
+    confidences = []
 
-	# loop over the number of rows
-	for y in range(0, numRows):
-		# extract the scores (probabilities), followed by the
-		# geometrical data used to derive potential bounding box
-		# coordinates that surround text
-		scoresData = scores[0, 0, y]
-		xData0 = geometry[0, 0, y]
-		xData1 = geometry[0, 1, y]
-		xData2 = geometry[0, 2, y]
-		xData3 = geometry[0, 3, y]
-		anglesData = geometry[0, 4, y]
+    # loop over the number of rows
+    for y in range(0, numRows):
+        # extract the scores (probabilities), followed by the
+        # geometrical data used to derive potential bounding box
+        # coordinates that surround text
+        scoresData = scores[0, 0, y]
+        xData0 = geometry[0, 0, y]
+        xData1 = geometry[0, 1, y]
+        xData2 = geometry[0, 2, y]
+        xData3 = geometry[0, 3, y]
+        anglesData = geometry[0, 4, y]
 
-		# loop over the number of columns
-		for x in range(0, numCols):
-			# if our score does not have sufficient probability,
-			# ignore it
-			if scoresData[x] < 0.9995:
-				continue
+        # loop over the number of columns
+        for x in range(0, numCols):
+            # if our score does not have sufficient probability,
+            # ignore it
+            if scoresData[x] < 0.9995:
+                continue
 
-			# compute the offset factor as our resulting feature
-			# maps will be 4x smaller than the input image
-			(offsetX, offsetY) = (x * 4.0, y * 4.0)
+            # compute the offset factor as our resulting feature
+            # maps will be 4x smaller than the input image
+            (offsetX, offsetY) = (x * 4.0, y * 4.0)
 
-			# extract the rotation angle for the prediction and
-			# then compute the sin and cosine
-			angle = anglesData[x]
-			cos = np.cos(angle)
-			sin = np.sin(angle)
+            # extract the rotation angle for the prediction and
+            # then compute the sin and cosine
+            angle = anglesData[x]
+            cos = np.cos(angle)
+            sin = np.sin(angle)
 
-			# use the geometry volume to derive the width and height
-			# of the bounding box
-			h = xData0[x] + xData2[x]
-			w = xData1[x] + xData3[x]
+            # use the geometry volume to derive the width and height
+            # of the bounding box
+            h = xData0[x] + xData2[x]
+            w = xData1[x] + xData3[x]
 
-			# compute both the starting and ending (x, y)-coordinates
-			# for the text prediction bounding box
-			endX = int(offsetX + (cos * xData1[x]) + (sin * xData2[x]))
-			endY = int(offsetY - (sin * xData1[x]) + (cos * xData2[x]))
-			startX = int(endX - w)
-			startY = int(endY - h)
+            # compute both the starting and ending (x, y)-coordinates
+            # for the text prediction bounding box
+            endX = int(offsetX + (cos * xData1[x]) + (sin * xData2[x]))
+            endY = int(offsetY - (sin * xData1[x]) + (cos * xData2[x]))
+            startX = int(endX - w)
+            startY = int(endY - h)
 
-			# add the bounding box coordinates and probability score
-			# to our respective lists
-			rects.append((startX, startY, endX, endY))
-			confidences.append(scoresData[x])
+            # add the bounding box coordinates and probability score
+            # to our respective lists
+            rects.append((startX, startY, endX, endY))
+            confidences.append(scoresData[x])
 
-	# return a tuple of the bounding boxes and associated confidences
-	return (rects, confidences)
+    # return a tuple of the bounding boxes and associated confidences
+    return (rects, confidences)
+
 
 def check_excluded(rect):
     x1, y1, x2, y2 = rect
@@ -221,6 +341,7 @@ def merge_line(line):
             merged.append(r)
     return merged
 
+
 def group_and_sort_rects(rects, y_tol=3):
     """Групує прямокутники в рядки по Y."""
     groups = []
@@ -241,6 +362,7 @@ def group_and_sort_rects(rects, y_tol=3):
     groups.sort(key=lambda g: g[0][1])
     return groups
 
+
 def merge_close_rects(line, x_tol=10):
     if not line:
         return []
@@ -257,10 +379,15 @@ def merge_close_rects(line, x_tol=10):
         else:
             merged.append(rect)
     return merged
+
+
 if __name__ == "__main__":
     net = cv2.dnn.readNet("frozen_east_text_detection.pb")
     net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
     net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
-#         net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
-#         net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
+    test_net = cv2.dnn.readNet("frozen_east_text_detection.pb")
+    test_net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
+    test_net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
+    #         net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
+    #         net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
     app.run(host="0.0.0.0", port=2224)
