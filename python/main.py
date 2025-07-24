@@ -20,6 +20,7 @@ EXCLUDE_BOUNDS = [
     (902, 421, 1109, 665),  # me
     (273, 6, 561, 52),  # buffs
     (1849, 1061, 1888, 1076),  # time
+    (2, 27, 788, 1132) # target name
 ]
 
 THRESHOLD = 0.9995
@@ -32,6 +33,17 @@ net = None
 test_net = None
 ocr_api = PyTessBaseAPI(psm=7, oem=1, lang='eng')
 
+@app.route("/findTargetName", methods=["POST"])
+def find_target_name():
+    img_bytes = request.data
+    npimg = np.frombuffer(img_bytes, np.uint8)
+    image = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+    roi = image[2:27, 788:1132]
+    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    _, bin_img = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    ocr_api.SetImage(Image.fromarray(bin_img))
+    text = ocr_api.GetUTF8Text()
+    return jsonify({"name": text})
 @app.route("/test", methods=["POST"])
 def test():
     global test_net
@@ -149,8 +161,7 @@ def test():
     for g in grouped:
         merged.extend(merge_close_rects(g))
     start = time.time()
-    pad = 0
-    roi = image[max(0, 2 - pad):27 + pad, max(0, 788 - pad):1132 + pad]
+    roi = image[2:27, max788:1132]
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
     _, bin_img = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     ocr_api.SetImage(Image.fromarray(bin_img))
