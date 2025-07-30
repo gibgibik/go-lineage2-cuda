@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+from PIL.ImageChops import overlay
 from flask import Flask, request, jsonify, Response
 import math
 import time
@@ -17,10 +18,11 @@ EXCLUDE_BOUNDS = [
     (697, 915, 1273, 1074),  # panel with skills
     (1710, -50, 1920, 233),  # map
     (1644, 0, 1748, 35),  # money
-    (902, 421, 1109, 665),  # me
+    # (902, 421, 1109, 665),  # me
+    (775, 390, 1235, 811),  # me
     (273, 6, 561, 52),  # buffs
     (1849, 1061, 1888, 1076),  # time
-    (2, 27, 788, 1132) # target name
+    (787, 2, 1135, 29) # target name
 ]
 
 THRESHOLD = 0.9995
@@ -104,7 +106,7 @@ def test():
     diff = np.linalg.norm(image_int - target_color, axis=2)
     mask = (diff < tolerance).astype(np.uint8) * 255
     image = cv2.bitwise_and(image, image, mask=mask)
-    # orig = image.copy()
+    # orig = image.copy()merged
     # (origH, origW) = image.shape[:2]
     newW = 1920
     newH = 1088
@@ -119,7 +121,7 @@ def test():
 
     (scores, geometry) = net.forward(layerNames)
     (rects, confidences) = decode_predictions(scores, geometry)
-    boxes = non_max_suppression(np.array(rects), probs=confidences)
+    boxes = non_max_suppression(np.array(rects), probs=confidences, overlapThresh=0.1)
     if not rects:
         return jsonify({"boxes": []})
 
@@ -292,9 +294,15 @@ def find_bounds():
     merged = []
     for g in grouped:
         merged.extend(merge_close_rects(g))
-
+    merged = sorted(merged, key=lambda rect: distance(center(rect), (newW/2, newH/2)))
     return jsonify({"boxes": merged})
 
+def center(rect):
+    x1, y1, x2, y2 = rect
+    return ((x1 + x2) / 2, (y1 + y2) / 2)
+
+def distance(p1, p2):
+    return math.hypot(p1[0] - p2[0], p1[1] - p2[1])
 
 def decode_predictions(scores, geometry):
     # grab the number of rows and columns from the scores volume, then
@@ -321,7 +329,7 @@ def decode_predictions(scores, geometry):
             # if our score does not have sufficient probability,
             # ignore it
             if scoresData[x] < 0.9995:
-                continue
+                    continue
 
             # compute the offset factor as our resulting feature
             # maps will be 4x smaller than the input image
