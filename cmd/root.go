@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/gibgibik/go-lineage2-cuda/cmd/web"
 	"github.com/gibgibik/go-lineage2-cuda/internal/core"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -10,7 +11,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 )
 
 func Execute() error {
@@ -57,14 +57,11 @@ func Execute() error {
 			return cmd.Usage()
 		},
 	}
-	//rootCmd.AddCommand(web.CreateWebServerCommand(logger.Sugar()))
+	rootCmd.AddCommand(web.CreateWebServerCommand(logger.Sugar()))
 	go func() {
 		defer cancel()
 		err = rootCmd.ExecuteContext(context.WithValue(ctx, "cnf", cnf))
 	}()
 	<-ctx.Done()
-	logger.Info("shutdown start")
-	time.Sleep(time.Second * 5)
-	logger.Info("shutdown end")
 	return err
 }
