@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/doraemonkeys/paddleocr"
 	"github.com/gibgibik/go-lineage2-cuda/internal/core"
 	"github.com/gibgibik/go-lineage2-cuda/internal/ocr"
+	externalEntity "github.com/gibgibik/go-lineage2-server/pkg/entity"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"gocv.io/x/gocv"
@@ -21,15 +23,18 @@ import (
 )
 
 var (
-	targetCl          *ocr.Target
-	excludeBoundsArea = []image.Rectangle{
-		image.Rect(0, 0, 247, 104),
-		image.Rect(0, 590, 370, 1074),
-		image.Rect(697, 915, 1273, 1074),
-		image.Rect(1710, 0, 1920, 350),
-		image.Rect(1644, 0, 1748, 35),
-		image.Rect(902, 478, 1040, 649),
-	}
+	targetCl *ocr.Target
+	//excludeBoundsArea = []image.Rectangle{
+	//	image.Rect(0, 0, 247, 110),         // ex player stat
+	//	image.Rect(0, 590, 370, 1074),      // chat
+	//	image.Rect(697, 915, 1273, 1074),   // panel with skills
+	//	image.Rect(1710, -50, 1920, 233),   // map
+	//	image.Rect(1644, 0, 1748, 35),      // money
+	//	image.Rect(775, 390, 1235, 811),    // me
+	//	image.Rect(273, 6, 561, 52),        // buffs
+	//	image.Rect(1849, 1061, 1888, 1076), // time
+	//	image.Rect(787, 2, 1135, 29),       // target name
+	//}
 )
 
 type BoxesStruct struct {
@@ -89,7 +94,7 @@ func httpServerStart(ctx context.Context, cnf *core.Config, logger *zap.SugaredL
 func findTargetNameHandler(logger *zap.SugaredLogger) func(writer http.ResponseWriter, request *http.Request) {
 	targetCl = ocr.NewTarget(logger)
 	return func(writer http.ResponseWriter, request *http.Request) {
-		var imgB, err = io.ReadAll(request.Body)
+		imgB, err := io.ReadAll(request.Body)
 		if err != nil {
 			errM := "fail to read body"
 			logger.Error(errM)
@@ -99,22 +104,17 @@ func findTargetNameHandler(logger *zap.SugaredLogger) func(writer http.ResponseW
 		defer request.Body.Close()
 		targetCl.Lock()
 		defer targetCl.Unlock()
-		err = targetCl.Cl.SetImageFromBytes(imgB)
+		paddleRes, err := targetCl.Cl.Ocr(imgB)
 		if err != nil {
 			logger.Error(err.Error())
 			createRequestError(writer, err.Error(), http.StatusBadRequest)
 			return
 		}
-		text, err := targetCl.Cl.Text()
-		if err != nil {
-			logger.Error(err.Error())
-			createRequestError(writer, err.Error(), http.StatusBadRequest)
-			return
-		}
+		parsedRes, _ := paddleocr.ParseResult(paddleRes)
 		res := struct {
 			Name string `json:"name"`
 		}{
-			Name: text,
+			Name: parsedRes.Data[0].Text,
 		}
 		j, _ := json.Marshal(res)
 		writer.Write(j)
@@ -130,7 +130,20 @@ func createRequestError(w http.ResponseWriter, err string, code int) {
 func findBoundsHandler(logger *zap.SugaredLogger) func(writer http.ResponseWriter, request *http.Request) {
 	net := ocr.InitNet()
 	return func(writer http.ResponseWriter, request *http.Request) {
-		cpImg, err := io.ReadAll(request.Body)
+		getBoundsConfigStr := request.FormValue("meta")
+		var getBoundsConfig externalEntity.GetBoundsConfig
+		if err := json.Unmarshal([]byte(getBoundsConfigStr), &getBoundsConfig); err != nil {
+			http.Error(writer, "bad json: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		file, _, errF := request.FormFile("file")
+		if errF != nil {
+			http.Error(writer, errF.Error(), http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+		var cpImg, err = io.ReadAll(file)
 		if err != nil {
 			errM := "fail to read body"
 			logger.Error(errM)
@@ -140,8 +153,8 @@ func findBoundsHandler(logger *zap.SugaredLogger) func(writer http.ResponseWrite
 		defer request.Body.Close()
 		resizeWidth := 1920
 		resizeHeight := 1088
-		npcThreshold := 0.9995
-		npcNms := 0.4
+		//npcThreshold := 0.9995
+		//npcNms := 0.4
 		rW := float64(1920) / float64(resizeWidth)
 		rH := float64(1080) / float64(resizeHeight)
 		mat, _ := gocv.IMDecode(cpImg, gocv.IMReadColor)
@@ -156,23 +169,18 @@ func findBoundsHandler(logger *zap.SugaredLogger) func(writer http.ResponseWrite
 
 		scores := outputBlobs[0]
 		geometry := outputBlobs[1]
-		//fmt.Println("scores size:", scores.Size())
-		//fmt.Println("geometry size:", geometry.Size())
-		rotatedBoxes, confidences := decodeBoundingBoxes(scores, geometry, float32(npcThreshold))
+		rotatedBoxes, confidences := decodeBoundingBoxes(scores, geometry, getBoundsConfig.NpcThreshold)
 		boxes := []image.Rectangle{}
 		for _, rotatedBox := range rotatedBoxes {
-			//if !checkExcludeBox(rotatedBox.BoundingRect) {
-			//	continue
-			//}
 			boxes = append(boxes, rotatedBox.BoundingRect)
 		}
 		// Only Apply NMS when there are at least one box
 		indices := make([]int, len(boxes))
 		if len(boxes) > 0 {
-			indices = gocv.NMSBoxes(boxes, confidences, float32(npcThreshold), float32(npcNms))
+			indices = gocv.NMSBoxes(boxes, confidences, getBoundsConfig.NpcThreshold, getBoundsConfig.NpcNms)
 		}
 		// Resize indices to only include those that have values other than zero
-		var numIndices int = 0
+		var numIndices int
 		for _, value := range indices {
 			if value != 0 {
 				numIndices++
@@ -220,10 +228,9 @@ func findBoundsHandler(logger *zap.SugaredLogger) func(writer http.ResponseWrite
 				//gocv.Line(&mat, p1, p2, color.RGBA{0, 255, 0, 0}, 1)
 			}
 			rect := image.Rect(minX, minY, maxX, maxY)
-			if !checkExcludeBox(rect) {
+			if !checkExcludeBox(rect, getBoundsConfig.ExcludeBounds) {
 				continue
 			}
-			//fmt.Println(whitePixelPercentage(mat, rect))
 
 			if whitePixelPercentage(mat, rect) < 10 {
 				continue
@@ -431,7 +438,7 @@ func decodeBoundingBoxes(scores gocv.Mat, geometry gocv.Mat, threshold float32) 
 	return
 }
 
-func checkExcludeBox(box image.Rectangle) bool {
+func checkExcludeBox(box image.Rectangle, excludeBoundsArea []image.Rectangle) bool {
 	for _, excludeBox := range excludeBoundsArea {
 		if excludeBox.Min.X <= box.Min.X && excludeBox.Min.Y <= box.Min.Y && excludeBox.Max.X >= box.Max.X && excludeBox.Max.Y >= box.Max.Y {
 			return false

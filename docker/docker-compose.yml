@@ -1,0 +1,26 @@
+services:
+  api:
+    build: cuda-golang
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    ports:
+      - "2224:2224"
+    volumes:
+      - ../:/var/www/go-lineage2-server
+#  paddleocr:
+#    build: paddleocr
+#    ports:
+#      - "2225:2225"
+#    deploy:
+#      resources:
+#        reservations:
+#          devices:
+#            - driver: nvidia
+#              count: all
+#              capabilities: [gpu]
