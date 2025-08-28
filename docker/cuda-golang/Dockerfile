@@ -14,6 +14,8 @@ RUN cd /root/go/pkg/mod/gocv.io/x/gocv@v0.42.0 && sed -i 's/WITH_GSTREAMER=ON/WI
 ##export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
 WORKDIR /var/www/go-lineage2-server
 ENV PADDLEOCR_RELEASE=PaddleOCR-json_v1.4.1_debian_x64_glibc2.31
+ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:/opt/paddleocr/lib/"
 RUN mkdir /opt/paddleocr
 COPY ${PADDLEOCR_RELEASE} /opt/paddleocr
+RUN /opt/paddleocr/install_env.sh
 CMD ["go", "run", "main.go", "web-server"]

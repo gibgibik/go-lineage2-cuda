@@ -94,6 +94,7 @@ func httpServerStart(ctx context.Context, cnf *core.Config, logger *zap.SugaredL
 func findTargetNameHandler(logger *zap.SugaredLogger) func(writer http.ResponseWriter, request *http.Request) {
 	targetCl = ocr.NewTarget(logger)
 	return func(writer http.ResponseWriter, request *http.Request) {
+		fmt.Println("locked")
 		imgB, err := io.ReadAll(request.Body)
 		if err != nil {
 			errM := "fail to read body"

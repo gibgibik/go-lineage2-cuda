@@ -1,2 +1,3 @@
 .idea
 var/log/*.log
+docker/cuda-golang/PaddleOCR-json_v1.4.1_debian_x64_glibc2.31
