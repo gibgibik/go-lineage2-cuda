@@ -14,7 +14,7 @@ require (
 require (
 	github.com/doraemonkeys/paddleocr v1.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
-	github.com/gibgibik/go-lineage2-server v0.0.0-20250828130135-63f7f8deabd6 // indirect
+	github.com/gibgibik/go-lineage2-server v0.0.0-20251020093734-504ce7d123b8 // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect

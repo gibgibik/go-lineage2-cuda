@@ -152,12 +152,13 @@ func findBoundsHandler(logger *zap.SugaredLogger) func(writer http.ResponseWrite
 			return
 		}
 		defer request.Body.Close()
-		resizeWidth := 1920
-		resizeHeight := 1088
+		resizeWidth := int(math.Ceil(float64(getBoundsConfig.Resolution[0])/32.0) * 32)
+		resizeHeight := int(math.Ceil(float64(getBoundsConfig.Resolution[1])/32.0) * 32)
+
 		//npcThreshold := 0.9995
 		//npcNms := 0.4
-		rW := float64(1920) / float64(resizeWidth)
-		rH := float64(1080) / float64(resizeHeight)
+		rW := float64(getBoundsConfig.Resolution[0]) / float64(resizeWidth)
+		rH := float64(getBoundsConfig.Resolution[1]) / float64(resizeHeight)
 		mat, _ := gocv.IMDecode(cpImg, gocv.IMReadColor)
 		blob := gocv.BlobFromImage(mat, 1.0, image.Pt(int(resizeWidth), int(resizeHeight)), gocv.NewScalar(123.68, 116.78, 103.94, 0), true, false)
 		net.SetInput(blob, "")
