@@ -111,10 +111,14 @@ func findTargetNameHandler(logger *zap.SugaredLogger) func(writer http.ResponseW
 			return
 		}
 		parsedRes, _ := paddleocr.ParseResult(paddleRes)
+		var name string
+		if len(parsedRes.Data) > 0 {
+			name = parsedRes.Data[0].Text
+		}
 		res := struct {
 			Name string `json:"name"`
 		}{
-			Name: parsedRes.Data[0].Text,
+			Name: name,
 		}
 		j, _ := json.Marshal(res)
 		writer.Write(j)
@@ -254,7 +258,7 @@ func findBoundsHandler(logger *zap.SugaredLogger) func(writer http.ResponseWrite
 	}
 }
 func mergeCloseRectsInLine(line [][]int) [][]int {
-	xTolerance := 10
+	xTolerance := 15
 	if len(line) == 0 {
 		return nil
 	}
@@ -265,9 +269,7 @@ func mergeCloseRectsInLine(line [][]int) [][]int {
 	for i := 1; i < len(line); i++ {
 		next := line[i]
 
-		// Якщо наступний дуже близько — об’єднуємо
 		if next[0]-current[2] <= xTolerance {
-			// об’єднати current і next
 			current = []int{
 				min(current[0], next[0]),
 				min(current[1], next[1]),
