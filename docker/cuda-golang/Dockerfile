@@ -1,9 +1,11 @@
-FROM nvidia/cuda:12.9.1-cudnn-devel-ubuntu24.04
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -y install nano wget curl git unzip sudo golang
-RUN DEBIAN_FRONTEND=noninteractive  apt install -y  --no-install-recommends golang sudo tesseract-ocr libtesseract-dev
-RUN cd ~/ && go mod init test && go get -u -d gocv.io/x/gocv
-RUN cd /root/go/pkg/mod/gocv.io/x/gocv@v0.42.0 && sed -i 's/WITH_GSTREAMER=ON/WITH_GSTREAMER=ON -D CUDNN_INCLUDE_DIR=\/usr\/include\/x86_64-linux-gnu -D CUDNN_LIBRARY=\/usr\/lib\/x86_64-linux-gnu\/libcudnn.so/g' Makefile && \
-    make install_cuda
+#FROM nvidia/cuda:12.9.1-cudnn-devel-ubuntu24.04
+#FROM nvidia/cuda:13.2.1-cudnn-devel-ubuntu24.04
+FROM cuda-golang
+#RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -y install nano wget curl git unzip sudo golang
+#RUN DEBIAN_FRONTEND=noninteractive  apt install -y  --no-install-recommends golang sudo tesseract-ocr libtesseract-dev
+#RUN cd ~/ && go mod init test && go get -u -d gocv.io/x/gocv
+#RUN cd /root/go/pkg/mod/gocv.io/x/gocv@v0.43.0 && sed -i 's/WITH_GSTREAMER=ON/WITH_GSTREAMER=ON -D CUDNN_INCLUDE_DIR=\/usr\/include\/x86_64-linux-gnu -D CUDNN_LIBRARY=\/usr\/lib\/x86_64-linux-gnu\/libcudnn.so/g' Makefile && \
+#    make install_cuda
 #RUN #go get -u -d gocv.io/x/gocv && cd ~/go/src/gocv.io/x/gocv && make install_cuda
 ##RUN pip install flask numpy imutils
 #RUN cd /opt && mkdir opencv && cd opencv && git clone https://github.com/opencv/opencv.git --branch 4.12.0 && git clone https://github.com/opencv/opencv_contrib.git --branch 4.12.0 \

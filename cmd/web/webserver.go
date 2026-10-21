@@ -70,6 +70,7 @@ func httpServerStart(ctx context.Context, cnf *core.Config, logger *zap.SugaredL
 	mux := http.NewServeMux() // Create
 	mux.HandleFunc("/findBounds", findBoundsHandler(logger))
 	mux.HandleFunc("/findTargetName", findTargetNameHandler(logger))
+	mux.HandleFunc("/findAll", findAllHandler(logger))
 	handle := &http.Server{
 		Addr:         ":" + cnf.WebServer.Port,
 		ReadTimeout:  10 * time.Second,
@@ -89,6 +90,32 @@ func httpServerStart(ctx context.Context, cnf *core.Config, logger *zap.SugaredL
 	}()
 
 	return handle
+}
+
+func findAllHandler(logger *zap.SugaredLogger) func(writer http.ResponseWriter, request *http.Request) {
+	targetCl = ocr.NewTarget(logger)
+	return func(writer http.ResponseWriter, request *http.Request) {
+		imgB, err := io.ReadAll(request.Body)
+		if err != nil {
+			errM := "fail to read body"
+			logger.Error(errM)
+			createRequestError(writer, errM, http.StatusBadRequest)
+			return
+		}
+		defer request.Body.Close()
+		targetCl.Lock()
+		defer targetCl.Unlock()
+		paddleRes, err := targetCl.Cl.Ocr(imgB)
+		if err != nil {
+			logger.Error(err.Error())
+			createRequestError(writer, err.Error(), http.StatusBadRequest)
+			return
+		}
+		parsedRes, _ := paddleocr.ParseResult(paddleRes)
+		j, _ := json.Marshal(parsedRes.Data)
+		writer.Write(j)
+		return
+	}
 }
 
 func findTargetNameHandler(logger *zap.SugaredLogger) func(writer http.ResponseWriter, request *http.Request) {
@@ -258,7 +285,7 @@ func findBoundsHandler(logger *zap.SugaredLogger) func(writer http.ResponseWrite
 	}
 }
 func mergeCloseRectsInLine(line [][]int) [][]int {
-	xTolerance := 15
+	xTolerance := 20
 	if len(line) == 0 {
 		return nil
 	}
@@ -330,7 +357,7 @@ func abs(x int) int {
 }
 
 func whitePixelPercentage(mat gocv.Mat, rect image.Rectangle) float64 {
-	threshold := 80
+	threshold := 90
 	if rect.Min.X < 0 || rect.Min.Y < 0 || rect.Max.X > mat.Cols() || rect.Max.Y > mat.Rows() {
 		return 0
 	}
@@ -349,8 +376,8 @@ func whitePixelPercentage(mat gocv.Mat, rect image.Rectangle) float64 {
 	gocv.Threshold(gray, &mask, float32(threshold), 255, gocv.ThresholdBinary)
 
 	// Debug: Save to verify
-	gocv.IMWrite("debug_gray.jpg", gray)
-	gocv.IMWrite("debug_white_mask.jpg", mask)
+	//gocv.IMWrite("debug_gray.jpg", gray)
+	//gocv.IMWrite("debug_white_mask.jpg", mask)
 
 	// Calculate percent
 	totalPixels := gray.Rows() * gray.Cols()
@@ -388,8 +415,8 @@ func decodeBoundingBoxes(scores gocv.Mat, geometry gocv.Mat, threshold float32) 
 
 			// Calculate offset
 			// Multiple by 4 because feature maps are 4 time less than input image.
-			offsetX := x * 4.0
-			offsetY := y * 4.0
+			offsetX := float64(x) * 4
+			offsetY := float64(y) * 4
 
 			// Calculate cos and sin of angle
 			cosA := math.Cos(float64(angle))
