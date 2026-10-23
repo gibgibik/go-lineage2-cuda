@@ -67,6 +67,7 @@ func CreateWebServerCommand(logger *zap.SugaredLogger) *cobra.Command {
 
 func httpServerStart(ctx context.Context, cnf *core.Config, logger *zap.SugaredLogger) *http.Server {
 	logger.Debug("starting webserver on port :", cnf.WebServer.Port)
+	targetCl = ocr.NewTarget(logger)
 	mux := http.NewServeMux() // Create
 	mux.HandleFunc("/findBounds", findBoundsHandler(logger))
 	mux.HandleFunc("/findTargetName", findTargetNameHandler(logger))
@@ -93,7 +94,6 @@ func httpServerStart(ctx context.Context, cnf *core.Config, logger *zap.SugaredL
 }
 
 func findAllHandler(logger *zap.SugaredLogger) func(writer http.ResponseWriter, request *http.Request) {
-	targetCl = ocr.NewTarget(logger)
 	return func(writer http.ResponseWriter, request *http.Request) {
 		imgB, err := io.ReadAll(request.Body)
 		if err != nil {
@@ -119,7 +119,6 @@ func findAllHandler(logger *zap.SugaredLogger) func(writer http.ResponseWriter, 
 }
 
 func findTargetNameHandler(logger *zap.SugaredLogger) func(writer http.ResponseWriter, request *http.Request) {
-	targetCl = ocr.NewTarget(logger)
 	return func(writer http.ResponseWriter, request *http.Request) {
 		imgB, err := io.ReadAll(request.Body)
 		if err != nil {
@@ -190,12 +189,19 @@ func findBoundsHandler(logger *zap.SugaredLogger) func(writer http.ResponseWrite
 		rW := float64(getBoundsConfig.Resolution[0]) / float64(resizeWidth)
 		rH := float64(getBoundsConfig.Resolution[1]) / float64(resizeHeight)
 		mat, _ := gocv.IMDecode(cpImg, gocv.IMReadColor)
+		defer mat.Close()
 		blob := gocv.BlobFromImage(mat, 1.0, image.Pt(int(resizeWidth), int(resizeHeight)), gocv.NewScalar(123.68, 116.78, 103.94, 0), true, false)
+		defer blob.Close()
 		net.SetInput(blob, "")
 
 		start := time.Now()
 		outputNames := []string{"feature_fusion/Conv_7/Sigmoid", "feature_fusion/concat_3"}
 		outputBlobs := net.ForwardLayers(outputNames)
+		defer func() {
+			for i := range outputBlobs {
+				_ = outputBlobs[i].Close()
+			}
+		}()
 		elapsed := time.Since(start)
 		fmt.Printf("Execution bounds took %s\n", elapsed)
 
@@ -227,7 +233,10 @@ func findBoundsHandler(logger *zap.SugaredLogger) func(writer http.ResponseWrite
 			// get 4 corners of the rotated rect
 			verticesMat := gocv.NewMat()
 			if err := gocv.BoxPoints(rotatedBoxes[indices[i]], &verticesMat); err != nil {
-				log.Fatal(err)
+				_ = verticesMat.Close()
+				logger.Error(err.Error())
+				createRequestError(writer, err.Error(), http.StatusInternalServerError)
+				return
 			}
 
 			//
@@ -259,6 +268,7 @@ func findBoundsHandler(logger *zap.SugaredLogger) func(writer http.ResponseWrite
 				vertices = append(vertices, p1)
 				//gocv.Line(&mat, p1, p2, color.RGBA{0, 255, 0, 0}, 1)
 			}
+			_ = verticesMat.Close()
 			rect := image.Rect(minX, minY, maxX, maxY)
 			if !checkExcludeBox(rect, getBoundsConfig.ExcludeBounds) {
 				continue
@@ -276,8 +286,6 @@ func findBoundsHandler(logger *zap.SugaredLogger) func(writer http.ResponseWrite
 		for _, v := range groupAndSortRects(result.Boxes) {
 			finalResult.Boxes = append(finalResult.Boxes, mergeCloseRectsInLine(v)...)
 		}
-
-		_ = blob.Close()
 
 		b, _ := json.Marshal(finalResult)
 		_, _ = writer.Write(b)
@@ -390,11 +398,17 @@ func whitePixelPercentage(mat gocv.Mat, rect image.Rectangle) float64 {
 
 func decodeBoundingBoxes(scores gocv.Mat, geometry gocv.Mat, threshold float32) (detections []gocv.RotatedRect, confidences []float32) {
 	scoresChannel := gocv.GetBlobChannel(scores, 0, 0)
+	defer scoresChannel.Close()
 	x0DataChannel := gocv.GetBlobChannel(geometry, 0, 0)
+	defer x0DataChannel.Close()
 	x1DataChannel := gocv.GetBlobChannel(geometry, 0, 1)
+	defer x1DataChannel.Close()
 	x2DataChannel := gocv.GetBlobChannel(geometry, 0, 2)
+	defer x2DataChannel.Close()
 	x3DataChannel := gocv.GetBlobChannel(geometry, 0, 3)
+	defer x3DataChannel.Close()
 	angleChannel := gocv.GetBlobChannel(geometry, 0, 4)
+	defer angleChannel.Close()
 
 	for y := 0; y < scoresChannel.Rows(); y++ {
 		for x := 0; x < scoresChannel.Cols(); x++ {
