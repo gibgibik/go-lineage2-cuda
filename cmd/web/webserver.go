@@ -495,6 +495,7 @@ func checkExcludeBox(box image.Rectangle, excludeBoundsArea []image.Rectangle) b
 func scrydeCaptchaHandler(cnf *core.Config, logger *zap.SugaredLogger) func(writer http.ResponseWriter, request *http.Request) {
 	threshold := float32(0.9)
 	return func(writer http.ResponseWriter, request *http.Request) {
+		fmt.Println("start")
 		start := time.Now()
 		file, _, errF := request.FormFile("file")
 		if errF != nil {
