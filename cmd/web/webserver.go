@@ -497,13 +497,13 @@ func scrydeCaptchaHandler(cnf *core.Config, logger *zap.SugaredLogger) func(writ
 	return func(writer http.ResponseWriter, request *http.Request) {
 		fmt.Println("start")
 		start := time.Now()
-		file, _, errF := request.FormFile("file")
-		if errF != nil {
-			http.Error(writer, errF.Error(), http.StatusBadRequest)
+		cpImg, err := io.ReadAll(request.Body)
+		if err != nil {
+			errM := "fail to read body"
+			logger.Error(errM)
+			createRequestError(writer, errM, http.StatusBadRequest)
 			return
 		}
-		defer file.Close()
-		cpImg, err := io.ReadAll(file)
 		if err != nil {
 			errM := "fail to read body"
 			logger.Error(errM)
