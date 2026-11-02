@@ -561,10 +561,10 @@ func scrydeCaptchaHandler(cnf *core.Config, logger *zap.SugaredLogger) func(writ
 		}
 		elapsed := time.Since(start)
 		fmt.Printf("scryde captcha detection took %s\n", elapsed)
-		b, _ := json.Marshal(map[string]interface{}{
-			"template_coordinates": []int{maxLoc.X, maxLoc.Y, maxLoc.X + templ.Cols(), maxLoc.Y + templ.Rows()},
-			"input_coordinates":    scrydeConfig.InputCoordinates,
-			"submit_coordinates":   scrydeConfig.SubmitCoordinates,
+		b, _ := json.Marshal(externalEntity.Response{
+			TemplateCoordinates: []int{maxLoc.X, maxLoc.Y, maxLoc.X + templ.Cols(), maxLoc.Y + templ.Rows()},
+			InputCoordinates:    scrydeConfig.InputCoordinates,
+			SubmitCoordinates:   scrydeConfig.SubmitCoordinates,
 		})
 		_, _ = writer.Write(b)
 		return
