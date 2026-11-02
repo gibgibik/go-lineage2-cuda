@@ -7,9 +7,15 @@ import (
 type Web struct {
 	Port string
 }
+type ScrydeCaptcha struct {
+	MaskFile string `mapstructure:"mask_file"`
+	InputCoordinates  []int `mapstructure:"input_coordinates"`
+	SubmitCoordinates []int `mapstructure:"submit_coordinates"`
+}
 type Config struct {
-	WebServer Web    `mapstructure:"web"`
-	BaseUrl   string `mapstructure:"base_url"`
+	WebServer     Web                      `mapstructure:"web"`
+	BaseUrl       string                   `mapstructure:"base_url"`
+	ScrydeCaptcha map[string]ScrydeCaptcha `mapstructure:"scryde_captcha"`
 }
 
 func InitConfig() (*Config, error) {
@@ -18,7 +24,6 @@ func InitConfig() (*Config, error) {
 		return nil, err
 	}
 	v := viper.New()
-	v.SetConfigFile("configs/main.env.yaml")
 	if v.ReadInConfig() == nil {
 		err := viper.MergeConfigMap(v.AllSettings())
 		if err != nil {

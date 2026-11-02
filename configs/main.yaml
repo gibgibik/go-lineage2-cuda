@@ -1,2 +1,7 @@
 web:
   port: 2224
+scryde_captcha:
+  25601440:
+    mask_file: "var/scryde_captcha_2560_1440.png"
+    input_coordinates: [ 164, 126 ]
+    submit_coordinates: [ 128, 160 ]

@@ -5,13 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/doraemonkeys/paddleocr"
-	"github.com/gibgibik/go-lineage2-cuda/internal/core"
-	"github.com/gibgibik/go-lineage2-cuda/internal/ocr"
-	externalEntity "github.com/gibgibik/go-lineage2-server/pkg/entity"
-	"github.com/spf13/cobra"
-	"go.uber.org/zap"
-	"gocv.io/x/gocv"
 	"image"
 	"io"
 	"log"
@@ -20,6 +13,14 @@ import (
 	"net/http"
 	"sort"
 	"time"
+
+	"github.com/doraemonkeys/paddleocr"
+	"github.com/gibgibik/go-lineage2-cuda/internal/core"
+	"github.com/gibgibik/go-lineage2-cuda/internal/ocr"
+	externalEntity "github.com/gibgibik/go-lineage2-server/pkg/entity"
+	"github.com/spf13/cobra"
+	"go.uber.org/zap"
+	"gocv.io/x/gocv"
 )
 
 var (
@@ -72,6 +73,7 @@ func httpServerStart(ctx context.Context, cnf *core.Config, logger *zap.SugaredL
 	mux.HandleFunc("/findBounds", findBoundsHandler(logger))
 	mux.HandleFunc("/findTargetName", findTargetNameHandler(logger))
 	mux.HandleFunc("/findAll", findAllHandler(logger))
+	mux.HandleFunc("/scrydeCaptcha", scrydeCaptchaHandler(cnf, logger))
 	handle := &http.Server{
 		Addr:         ":" + cnf.WebServer.Port,
 		ReadTimeout:  10 * time.Second,
@@ -489,4 +491,81 @@ func checkExcludeBox(box image.Rectangle, excludeBoundsArea []image.Rectangle) b
 		}
 	}
 	return true
+}
+func scrydeCaptchaHandler(cnf *core.Config, logger *zap.SugaredLogger) func(writer http.ResponseWriter, request *http.Request) {
+	threshold := float32(0.9)
+	return func(writer http.ResponseWriter, request *http.Request) {
+		start := time.Now()
+		file, _, errF := request.FormFile("file")
+		if errF != nil {
+			http.Error(writer, errF.Error(), http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+		cpImg, err := io.ReadAll(file)
+		if err != nil {
+			errM := "fail to read body"
+			logger.Error(errM)
+			createRequestError(writer, errM, http.StatusBadRequest)
+			return
+		}
+		defer request.Body.Close()
+		inputImg, err := gocv.IMDecode(cpImg, gocv.IMReadColor)
+		if err != nil {
+			errM := "fail to read body"
+			logger.Error(errM)
+			createRequestError(writer, errM, http.StatusBadRequest)
+			return
+		}
+		defer inputImg.Close()
+		scrydeConfig, exists := cnf.ScrydeCaptcha[fmt.Sprintf("%d%d", inputImg.Cols(), inputImg.Rows())]
+		if !exists {
+			errM := fmt.Sprintf("config doesnt exist: %d%d", inputImg.Rows(), inputImg.Cols())
+			logger.Error(errM)
+			createRequestError(writer, errM, http.StatusBadRequest)
+			return
+		}
+		templ := gocv.IMRead(scrydeConfig.MaskFile, gocv.IMReadColor)
+		defer templ.Close()
+		// Переводимо обидва зображення у grayscale
+		grayImg := gocv.NewMat()
+		defer grayImg.Close()
+
+		grayTempl := gocv.NewMat()
+		defer grayTempl.Close()
+
+		gocv.CvtColor(inputImg, &grayImg, gocv.ColorBGRToGray)
+		gocv.CvtColor(templ, &grayTempl, gocv.ColorBGRToGray)
+
+		// Пошук шаблону
+		result := gocv.NewMat()
+		defer result.Close()
+
+		mask := gocv.NewMat()
+		defer mask.Close()
+
+		gocv.MatchTemplate(
+			grayImg,
+			grayTempl,
+			&result,
+			gocv.TmCcoeffNormed,
+			mask,
+		)
+		_, maxVal, _, maxLoc := gocv.MinMaxLoc(result)
+		if float32(maxVal) >= threshold {
+			fmt.Println("Template found!")
+		} else {
+			fmt.Println("Template not found")
+			return
+		}
+		elapsed := time.Since(start)
+		fmt.Printf("scryde captcha detection took %s\n", elapsed)
+		b, _ := json.Marshal(map[string]interface{}{
+			"template_coordinates": []int{maxLoc.X, maxLoc.Y, maxLoc.X + templ.Cols(), maxLoc.Y + templ.Rows()},
+			"input_coordinates":    scrydeConfig.InputCoordinates,
+			"submit_coordinates":   scrydeConfig.SubmitCoordinates,
+		})
+		_, _ = writer.Write(b)
+		return
+	}
 }
